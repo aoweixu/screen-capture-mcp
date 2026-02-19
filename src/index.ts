@@ -19,22 +19,31 @@ function runPowerShell(script: string): Buffer {
   return Buffer.from(result.trim(), "base64");
 }
 
-function captureFullScreen(): Buffer {
+interface ScreenInfo {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function getScreenLayout(): ScreenInfo[] {
+  const result = execSync(
+    `powershell -NoProfile -NonInteractive -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | ForEach-Object { Write-Output ('' + $_.Bounds.X + ',' + $_.Bounds.Y + ',' + $_.Bounds.Width + ',' + $_.Bounds.Height) }"`,
+    { encoding: "utf-8", timeout: 10000 }
+  );
+  return result.trim().split(/\r?\n/).map((line) => {
+    const [x, y, width, height] = line.split(",").map(Number);
+    return { x, y, width, height };
+  });
+}
+
+function captureSingleScreen(screen: ScreenInfo): Buffer {
   return runPowerShell(`
 Add-Type -AssemblyName System.Drawing
-Add-Type -AssemblyName System.Windows.Forms
 
-$screens = [System.Windows.Forms.Screen]::AllScreens
-$minX = ($screens | ForEach-Object { $_.Bounds.X } | Measure-Object -Minimum).Minimum
-$minY = ($screens | ForEach-Object { $_.Bounds.Y } | Measure-Object -Minimum).Minimum
-$maxX = ($screens | ForEach-Object { $_.Bounds.X + $_.Bounds.Width } | Measure-Object -Maximum).Maximum
-$maxY = ($screens | ForEach-Object { $_.Bounds.Y + $_.Bounds.Height } | Measure-Object -Maximum).Maximum
-$totalWidth = $maxX - $minX
-$totalHeight = $maxY - $minY
-
-$bmp = New-Object System.Drawing.Bitmap($totalWidth, $totalHeight)
+$bmp = New-Object System.Drawing.Bitmap(${screen.width}, ${screen.height})
 $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-$graphics.CopyFromScreen($minX, $minY, 0, 0, (New-Object System.Drawing.Size($totalWidth, $totalHeight)))
+$graphics.CopyFromScreen(${screen.x}, ${screen.y}, 0, 0, (New-Object System.Drawing.Size(${screen.width}, ${screen.height})))
 $graphics.Dispose()
 
 $ms = New-Object System.IO.MemoryStream
@@ -44,6 +53,44 @@ $bmp.Dispose()
 [Convert]::ToBase64String($ms.ToArray())
 $ms.Dispose()
 `);
+}
+
+async function captureAllScreens(): Promise<Buffer> {
+  const screens = getScreenLayout();
+  if (screens.length === 1) {
+    return captureSingleScreen(screens[0]);
+  }
+
+  const minX = Math.min(...screens.map((s) => s.x));
+  const minY = Math.min(...screens.map((s) => s.y));
+  const maxX = Math.max(...screens.map((s) => s.x + s.width));
+  const maxY = Math.max(...screens.map((s) => s.y + s.height));
+  const totalWidth = maxX - minX;
+  const totalHeight = maxY - minY;
+
+  const captures = screens.map((screen) => ({
+    input: captureSingleScreen(screen),
+    left: screen.x - minX,
+    top: screen.y - minY,
+  }));
+
+  return sharp({
+    create: {
+      width: totalWidth,
+      height: totalHeight,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 1 },
+    },
+  })
+    .composite(
+      captures.map((c) => ({
+        input: c.input,
+        left: c.left,
+        top: c.top,
+      }))
+    )
+    .png()
+    .toBuffer();
 }
 
 function captureWindowByTitle(title: string): Buffer {
@@ -122,7 +169,7 @@ server.tool(
       if (window_title) {
         pngBuffer = captureWindowByTitle(window_title);
       } else {
-        pngBuffer = captureFullScreen();
+        pngBuffer = await captureAllScreens();
       }
 
       pngBuffer = await resizeImage(pngBuffer);
