@@ -100,11 +100,26 @@ take_screenshot(window_title?: string)
 
 Returns a base64-encoded PNG image.
 
+## Privacy
+
+Screenshots are captured and processed entirely on your local machine. Nothing is uploaded, saved to disk, or sent to any external service by this tool.
+
+The captured image is:
+
+1. Taken locally via PowerShell/.NET
+2. Resized in-memory using `sharp`
+3. Passed directly to Claude Code via the MCP protocol as base64
+
+No screenshots are written to your filesystem — they exist only in memory for the duration of the MCP tool call. The image data is sent to the Claude API as part of your conversation (the same as if you had dragged a screenshot into the chat yourself), but it is never stored or logged by this server.
+
+If you want to verify this, the entire server is a single file — [src/index.ts](src/index.ts).
+
 ## How It Works
 
 - Uses PowerShell with `System.Drawing` and `System.Windows.Forms` to capture the screen
 - For window-specific capture, uses `user32.dll GetWindowRect` via P/Invoke to find and capture the target window
 - Images are resized to 1280px wide using `sharp` before being returned to keep token usage reasonable
+- No temp files or disk writes — everything happens in memory
 
 ## Requirements
 
