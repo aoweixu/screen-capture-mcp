@@ -11,8 +11,9 @@ const server = new McpServer({
 });
 
 function runPowerShell(script: string): Buffer {
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
   const result = execSync(
-    `powershell -NoProfile -NonInteractive -Command ${JSON.stringify(script)}`,
+    `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
     { encoding: "utf-8", maxBuffer: 50 * 1024 * 1024, timeout: 15000 }
   );
   return Buffer.from(result.trim(), "base64");
