@@ -1,4 +1,4 @@
-# screen-mcp
+# screen-capture-mcp
 
 An MCP server that gives Claude Code (or any MCP client) the ability to take screenshots. Useful when working on games, GUIs, or anything visual where Claude needs to see what's on your screen.
 
@@ -14,8 +14,8 @@ An MCP server that gives Claude Code (or any MCP client) the ability to take scr
 ## Installation
 
 ```bash
-git clone https://github.com/kmoulder/screen-mcp.git
-cd screen-mcp
+git clone https://github.com/kmoulder/screen-capture-mcp.git
+cd screen-capture-mcp
 npm install
 npm run build
 ```
@@ -23,7 +23,7 @@ npm run build
 Then register it with Claude Code:
 
 ```bash
-claude mcp add -s user -t stdio screen-mcp -- node /path/to/screen-mcp/dist/index.js
+claude mcp add -s user -t stdio screen-capture-mcp -- node /path/to/screen-capture-mcp/dist/index.js
 ```
 
 Or add it manually to your `~/.claude.json`:
@@ -31,10 +31,10 @@ Or add it manually to your `~/.claude.json`:
 ```json
 {
   "mcpServers": {
-    "screen-mcp": {
+    "screen-capture-mcp": {
       "type": "stdio",
       "command": "node",
-      "args": ["/path/to/screen-mcp/dist/index.js"]
+      "args": ["/path/to/screen-capture-mcp/dist/index.js"]
     }
   }
 }

@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { execSync } from "child_process";
 
 const server = new McpServer({
-  name: "screen-mcp",
+  name: "screen-capture-mcp",
   version: "1.0.0",
 });
 
