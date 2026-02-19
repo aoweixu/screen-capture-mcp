@@ -4,23 +4,17 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import sharp from "sharp";
 import { execSync } from "child_process";
-
 const server = new McpServer({
-  name: "screen-capture-mcp",
-  version: "1.0.0",
+    name: "screen-capture-mcp",
+    version: "1.0.0",
 });
-
-function runPowerShell(script: string): Buffer {
-  const encoded = Buffer.from(script, "utf16le").toString("base64");
-  const result = execSync(
-    `powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
-    { encoding: "utf-8", maxBuffer: 50 * 1024 * 1024, timeout: 15000 }
-  );
-  return Buffer.from(result.trim(), "base64");
+function runPowerShell(script) {
+    const encoded = Buffer.from(script, "utf16le").toString("base64");
+    const result = execSync(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { encoding: "utf-8", maxBuffer: 50 * 1024 * 1024, timeout: 15000 });
+    return Buffer.from(result.trim(), "base64");
 }
-
-function captureFullScreen(): Buffer {
-  return runPowerShell(`
+function captureFullScreen() {
+    return runPowerShell(`
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 
@@ -45,11 +39,9 @@ $bmp.Dispose()
 $ms.Dispose()
 `);
 }
-
-function captureWindowByTitle(title: string): Buffer {
-  const safeTitle = title.replace(/'/g, "''");
-
-  return runPowerShell(`
+function captureWindowByTitle(title) {
+    const safeTitle = title.replace(/'/g, "''");
+    return runPowerShell(`
 Add-Type -AssemblyName System.Drawing
 
 Add-Type @'
@@ -89,72 +81,57 @@ $bmp.Dispose()
 $ms.Dispose()
 `);
 }
-
-async function resizeImage(
-  pngBuffer: Buffer,
-  targetWidth = 2560
-): Promise<Buffer> {
-  const metadata = await sharp(pngBuffer).metadata();
-  if (metadata.width && metadata.width > targetWidth) {
-    return sharp(pngBuffer)
-      .resize({ width: targetWidth, withoutEnlargement: true })
-      .png()
-      .toBuffer();
-  }
-  return pngBuffer;
-}
-
-server.tool(
-  "take_screenshot",
-  "Captures a screenshot of all displays or a specific window. Returns the image as a PNG. If window_title is provided, captures only that window (partial title match). Otherwise captures all monitors combined.",
-  {
-    window_title: z
-      .string()
-      .optional()
-      .describe(
-        "Optional window title to capture (partial match). If omitted, captures all monitors."
-      ),
-  },
-  async ({ window_title }) => {
-    try {
-      let pngBuffer: Buffer;
-
-      if (window_title) {
-        pngBuffer = captureWindowByTitle(window_title);
-      } else {
-        pngBuffer = captureFullScreen();
-      }
-
-      pngBuffer = await resizeImage(pngBuffer);
-      const base64 = pngBuffer.toString("base64");
-
-      return {
-        content: [
-          {
-            type: "image" as const,
-            data: base64,
-            mimeType: "image/png",
-          },
-        ],
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        content: [
-          { type: "text" as const, text: `Screenshot failed: ${message}` },
-        ],
-        isError: true,
-      };
+async function resizeImage(pngBuffer, targetWidth = 2560) {
+    const metadata = await sharp(pngBuffer).metadata();
+    if (metadata.width && metadata.width > targetWidth) {
+        return sharp(pngBuffer)
+            .resize({ width: targetWidth, withoutEnlargement: true })
+            .png()
+            .toBuffer();
     }
-  }
-);
-
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+    return pngBuffer;
 }
-
+server.tool("take_screenshot", "Captures a screenshot of all displays or a specific window. Returns the image as a PNG. If window_title is provided, captures only that window (partial title match). Otherwise captures all monitors combined.", {
+    window_title: z
+        .string()
+        .optional()
+        .describe("Optional window title to capture (partial match). If omitted, captures all monitors."),
+}, async ({ window_title }) => {
+    try {
+        let pngBuffer;
+        if (window_title) {
+            pngBuffer = captureWindowByTitle(window_title);
+        }
+        else {
+            pngBuffer = captureFullScreen();
+        }
+        pngBuffer = await resizeImage(pngBuffer);
+        const base64 = pngBuffer.toString("base64");
+        return {
+            content: [
+                {
+                    type: "image",
+                    data: base64,
+                    mimeType: "image/png",
+                },
+            ],
+        };
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+            content: [
+                { type: "text", text: `Screenshot failed: ${message}` },
+            ],
+            isError: true,
+        };
+    }
+});
+async function main() {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+}
 main().catch((error) => {
-  console.error("Server failed to start:", error);
-  process.exit(1);
+    console.error("Server failed to start:", error);
+    process.exit(1);
 });
